@@ -1,0 +1,102 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+  <meta charset="UTF-8">
+  <meta http-equiv="refresh" content="60">
+  <title>Temperaturüberwachung</title>
+  <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
+  <style>
+    body { font-family: Arial; font-size: 16px; display: flex; flex-direction: row; margin: 0; padding: 0; }
+    .values { flex: 1; padding: 20px; max-width: 300px; }
+    .chart { flex: 2; padding: 20px; }
+    .small-text { font-size: 12px; color: #333; }
+    .temperature { font-size: 20px; font-weight: bold; }
+	.values h4 {margin-top: 5px; margin-bottom: 2px; }
+  </style>
+</head>
+<body>
+  <div class="values">
+    <h2>Temperaturüberwachung</h2>
+    <p>{{DATETIME}}</p>
+    <p>Außentemperatur: <span class="temperature" style="color:{{COLOR_OUT}}">{{AUSSENTEMP}} °C</span></p>
+
+    <!-- Lager A -->
+    <h4>{{LAGER_A_NAME}}{{WARN_A}}</h4>
+    Temperatur: <span class="temperature" style="color:{{COLOR_A}}">{{TEMP_A}} °C</span><br>
+    <span class="small-text">
+      SW: <b>{{SW_A}}</b> °C<br>
+      GWu: <b>{{GWU_A}}</b> °C<br>
+      GWo: <b>{{GWO_A}}</b> °C<br>
+    </span>
+    Luftfeuchtigkeit: <b>{{LUFT_A}}</b> %<br><br>
+
+    <!-- Lager B -->
+    <h4>{{LAGER_B_NAME}}{{WARN_B}}</h4>
+    Temperatur: <span class="temperature" style="color:{{COLOR_B}}">{{TEMP_B}} °C</span><br>
+    <span class="small-text">
+      SW: <b>{{SW_B}}</b> °C<br>
+      GWu: <b>{{GWU_B}}</b> °C<br>
+      GWo: <b>{{GWO_B}}</b> °C<br>
+    </span>
+    Luftfeuchtigkeit: <b>{{LUFT_B}}</b> %<br><br>
+
+    <!-- Lager C -->
+    <h4>{{LAGER_C_NAME}}{{WARN_C}}</h4>
+    Temperatur: <span class="temperature" style="color:{{COLOR_C}}">{{TEMP_C}} °C</span><br>
+    <span class="small-text">
+      SW: <b>{{SW_C}}</b> °C<br>
+      GWu: <b>{{GWU_C}}</b> °C<br>
+      GWo: <b>{{GWO_C}}</b> °C<br>
+    </span>
+    Luftfeuchtigkeit: <b>{{LUFT_C}}</b> %<br><br>
+
+    <!-- Lager D -->
+    <h4>{{LAGER_D_NAME}}{{WARN_D}}</h4>
+    Temperatur: <span class="temperature" style="color:{{COLOR_D}}">{{TEMP_D}} °C</span><br>
+    <span class="small-text">
+      SW: <b>{{SW_D}}</b> °C<br>
+      GWu: <b>{{GWU_D}}</b> °C<br>
+      GWo: <b>{{GWO_D}}</b> °C<br>
+    </span>
+    Luftfeuchtigkeit: <b>{{LUFT_D}}</b> %<br><br>
+
+    <!-- Lager E -->
+    <h4>{{LAGER_E_NAME}}{{WARN_E}}</h4>
+    Temperatur: <span class="temperature" style="color:{{COLOR_E}}">{{TEMP_E}} °C</span><br>
+    <span class="small-text">
+      SW: <b>{{SW_E}}</b> °C<br>
+      GWu: <b>{{GWU_E}}</b> °C<br>
+      GWo: <b>{{GWO_E}}</b> °C<br>
+    </span>
+    Luftfeuchtigkeit: <b>{{LUFT_E}}</b> %<br><br>
+
+  </div>
+
+  <div class="chart">
+    <h2>Temperaturverlauf Lager A–E & Außentemperatur (letzte 48h)</h2>
+    <canvas id="tempChart" width="1400" height="700"></canvas>
+  </div>
+
+  <script>
+    async function loadData() {
+      const response = await fetch("/temps.json");
+      const data = await response.json();
+      return data;
+    }
+    function createChart(data) {
+      const ctx = document.getElementById("tempChart").getContext("2d");
+      const labels = data.map(d => d.timestamp);
+      const datasets = [
+        { label: "Außentemperatur", data: data.map(d => d.aussentemp), borderColor: "Turquoise", fill: false, pointRadius: 2 },
+        { label: "{{LAGER_A_NAME}}", data: data.map(d => d.tempLagerA), borderColor: "red", fill: false, pointRadius: 2 },
+        { label: "{{LAGER_B_NAME}}", data: data.map(d => d.tempLagerB), borderColor: "blue", fill: false, pointRadius: 2 },
+        { label: "{{LAGER_C_NAME}}", data: data.map(d => d.tempLagerC), borderColor: "green", fill: false, pointRadius: 2 },
+        { label: "{{LAGER_D_NAME}}", data: data.map(d => d.tempLagerD), borderColor: "orange", fill: false, pointRadius: 2 },
+        { label: "{{LAGER_E_NAME}}", data: data.map(d => d.tempLagerE), borderColor: "purple", fill: false, pointRadius: 2 }
+      ];
+      new Chart(ctx, { type: "line", data: { labels, datasets }, options: { responsive: false } });
+    }
+    loadData().then(createChart);
+  </script>
+</body>
+</html>
