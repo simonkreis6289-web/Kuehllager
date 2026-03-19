@@ -1,0 +1,222 @@
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<title>SAP Schnittstellen Dashboard</title>
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+
+<style>
+:root{
+  --bg:#0f172a;--card:#111827;--accent:#38bdf8;
+  --success:#22c55e;--danger:#ef4444;
+  --text:#e5e7eb;--muted:#94a3b8;
+}
+*{box-sizing:border-box}
+body{
+  margin:0;padding:32px;font-family:system-ui;
+  background:radial-gradient(1200px 600px at 20% -10%,#1e293b,transparent),var(--bg);
+  color:var(--text)
+}
+h1{margin-bottom:24px}
+.top-grid{display:grid;grid-template-columns:1fr 1fr 420px;gap:24px}
+@media(max-width:1200px){.top-grid{grid-template-columns:1fr}}
+.card,.history{
+  background:linear-gradient(180deg,#020617,var(--card));
+  border-radius:20px;padding:24px;
+  box-shadow:0 20px 40px rgba(0,0,0,.35)
+}
+h2{margin-top:0;color:var(--accent);font-size:1.2rem}
+.field{
+  display:flex;justify-content:space-between;
+  padding:8px 0;border-bottom:1px dashed rgba(148,163,184,.15);
+  font-size:.9rem
+}
+.label{color:var(--muted)}
+.badge{padding:4px 10px;border-radius:999px;font-size:.75rem;font-weight:600}
+.ok{background:rgba(34,197,94,.15);color:var(--success)}
+.nok{background:rgba(239,68,68,.15);color:var(--danger)}
+.history{max-height:600px;overflow:auto}
+.history-entry{
+  border-left:4px solid;padding:12px;margin-bottom:12px;
+  border-radius:8px;font-size:.85rem
+}
+.history-entry.success{border-color:var(--success);background:rgba(34,197,94,.05)}
+.history-entry.error{border-color:var(--danger);background:rgba(239,68,68,.05)}
+.history-id{font-weight:600;margin-bottom:6px}
+.success .history-id{color:var(--success)}
+.error .history-id{color:var(--danger)}
+.history-details{
+  display:grid;grid-template-columns:auto 1fr;
+  gap:4px 8px;font-size:.75rem
+}
+.history-label{color:var(--muted)}
+</style>
+</head>
+
+<body>
+<h1>📦 SAP Schnittstellen Übersicht</h1>
+
+<div class="top-grid">
+
+<!-- To SAP -->
+<div class="card">
+<h2>➡️ To SAP</h2>
+<div class="field"><span class="label">Material</span><span id="to-material">–</span></div>
+<div class="field"><span class="label">HU</span><span id="to-hu">–</span></div>
+<div class="field"><span class="label">Lagerplatz</span><span id="to-lager">–</span></div>
+<div class="field"><span class="label">Datum</span><span id="to-date">–</span></div>
+<div class="field"><span class="label">Datensatz-ID</span><span id="to-id">0</span></div>
+<div class="field"><span class="label">Gültig</span><span id="to-valid" class="badge nok">false</span></div>
+<div class="field"><span class="label">Abgeschlossen</span><span id="to-done" class="badge nok">false</span></div>
+</div>
+
+<!-- From SAP -->
+<div class="card">
+<h2>⬅️ From SAP</h2>
+<div class="field"><span class="label">Datensatz-ID</span><span id="from-id">0</span></div>
+<div class="field"><span class="label">SAP Status</span><span id="from-status">0</span></div>
+<div class="field"><span class="label">Quitiert</span><span id="from-quit" class="badge nok">false</span></div>
+<div class="field"><span class="label">Quittung</span><span id="from-receipt">–</span></div>
+<div class="field"><span class="label">Fehlertext</span><span id="from-error">–</span></div>
+</div>
+
+<!-- Historie -->
+<div class="history">
+<h2>📋 Historie</h2>
+<div id="history"></div>
+</div>
+
+</div>
+
+<script>
+/* ================== SYNC & MASTER ================== */
+const channel = new BroadcastChannel('sap-dashboard');
+let isMaster = false;
+let hasActiveDataset = false;
+
+function tryBecomeMaster(){
+  if(!localStorage.getItem('sap-master')){
+    localStorage.setItem('sap-master', Date.now());
+    isMaster = true;
+  }
+}
+window.addEventListener('beforeunload',()=>{
+  if(isMaster) localStorage.removeItem('sap-master');
+});
+
+/* ================== STATE ================== */
+const historyEl = document.getElementById('history');
+const processedIDs = new Set();
+let currentToSAP = {};
+
+/* ================== UI HELPERS ================== */
+function setBadge(id,val){
+  const el=document.getElementById(id);
+  el.textContent=val;
+  el.className='badge '+(val?'ok':'nok');
+}
+
+function addHistory(entry){
+  const div=document.createElement('div');
+  div.className='history-entry '+(entry.success?'success':'error');
+  div.innerHTML=`
+    <div class="history-id">
+      Datensatz #${entry.id} – ${entry.success?'✅ Erfolgreich':'❌ Fehler'}
+    </div>
+    <div class="history-details">
+      <span class="history-label">Material</span><span>${entry.material}</span>
+      <span class="history-label">HU</span><span>${entry.hu}</span>
+      <span class="history-label">Lager</span><span>${entry.lager}</span>
+      ${entry.success?`
+        <span class="history-label">Quittung</span>
+        <span>${entry.quittung||'–'}</span>`:''}
+      ${!entry.success?`
+        <span class="history-label">Fehler</span>
+        <span>${entry.error||'Unbekannt'}</span>`:''}
+    </div>`;
+  historyEl.prepend(div);
+}
+
+/* ================== UPDATE UI ================== */
+function updateToSAP(d){
+  document.getElementById('to-material').textContent=d.Materialnumber||'–';
+  document.getElementById('to-hu').textContent=d.HandlingUnit||'–';
+  document.getElementById('to-lager').textContent=d.Lagerplatz||'–';
+  document.getElementById('to-date').textContent=d.StoreInDate||'–';
+  document.getElementById('to-id').textContent=d.DatensatzID||0;
+  setBadge('to-valid',d.DatensatzGueltig);
+  setBadge('to-done',d.Abgeschlossen);
+
+  currentToSAP={
+    material:d.Materialnumber,
+    hu:d.HandlingUnit,
+    lager:d.Lagerplatz
+  };
+
+  // ⭐ Re-Polling Trigger
+  hasActiveDataset = d.DatensatzGueltig===true && d.Abgeschlossen===false;
+}
+
+function updateFromSAP(d){
+  document.getElementById('from-id').textContent=d.DatensatzID||0;
+  document.getElementById('from-status').textContent=d.SAPStatus||0;
+  document.getElementById('from-receipt').textContent=d.SAPQuittungsNr||'–';
+  document.getElementById('from-error').textContent=d.SAPErrortext||'–';
+  setBadge('from-quit',d.DatensatzQuitBySAP);
+
+  const id=d.DatensatzID;
+  if(!id || processedIDs.has(id)) return;
+
+  if(d.SAPStatus===1 && d.DatensatzQuitBySAP){
+    addHistory({
+      id,success:true,
+      material:currentToSAP.material,
+      hu:currentToSAP.hu,
+      lager:currentToSAP.lager,
+      quittung:d.SAPQuittungsNr
+    });
+    processedIDs.add(id);
+    hasActiveDataset=false;
+  }
+  else if(d.SAPStatus===2){
+    addHistory({
+      id,success:false,
+      material:currentToSAP.material,
+      hu:currentToSAP.hu,
+      lager:currentToSAP.lager,
+      error:d.SAPErrortext
+    });
+    processedIDs.add(id);
+    hasActiveDataset=false;
+  }
+}
+
+/* ================== BROADCAST ================== */
+channel.onmessage=e=>{
+  if(e.data.toSAP) updateToSAP(e.data.toSAP);
+  if(e.data.fromSAP) updateFromSAP(e.data.fromSAP);
+};
+
+/* ================== POLLING ================== */
+(async()=>{
+  tryBecomeMaster();
+  if(!isMaster) return;
+
+  const init=await fetch('/ToSAP').then(r=>r.json());
+  channel.postMessage({toSAP:init});
+  updateToSAP(init);
+})();
+
+setInterval(async()=>{
+  if(!isMaster || !hasActiveDataset) return;
+
+  const toSAP=await fetch('/ToSAP').then(r=>r.json());
+  const fromSAP=await fetch('/fromSAP').then(r=>r.json());
+
+  channel.postMessage({toSAP,fromSAP});
+  updateToSAP(toSAP);
+  updateFromSAP(fromSAP);
+},1000);
+</script>
+</body>
+</html>
